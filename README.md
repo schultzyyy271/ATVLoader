@@ -11,7 +11,7 @@ Sideload to your AppleTV Device Locally with a Windows PC! NO MAC NO XCODE
 1. Download the release zip
 2. Extract to a folder
 3. Run `SETUP_DEPS.bat` (installs pymobiledevice3)
-4. Double-click `ATVLoader.exe`
+4. Run `ATVLoader.exe` as an Administrator
 
 ## Usage
 
