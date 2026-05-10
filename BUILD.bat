@@ -127,11 +127,6 @@ echo   ============================================
 echo.
 echo   Your app is at: dist\ATVLoader\
 echo.
-echo   To ship on GitHub:
-echo   1. Copy zsign.exe into dist\ATVLoader\
-echo   2. Zip the dist\ATVLoader\ folder
-echo   3. Upload as a GitHub release
-echo.
 echo   Users need Python installed. First time they
 echo   run SETUP_DEPS.bat to install pymobiledevice3,
 echo   then just double-click ATVLoader.exe
