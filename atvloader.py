@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ATVLoader v3.0 - Windows Apple TV Sideloader
+ATVLoader v1.0 - Windows Apple TV Sideloader
 - Scan: zeroconf (in-process)
 - Sign: zsign (subprocess)  
 - Pair: pymobiledevice3 Python API + GUI PIN dialog (in-process)
