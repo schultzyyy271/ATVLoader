@@ -2,7 +2,6 @@
 Sideload to your AppleTV Device Locally with a Windows PC! NO MAC NO XCODE
 
 ## Requirements
-- **Run the .exe as ADMINISTRATOR!**
 - Windows 10/11
 - Python 3.10+ (https://python.org — check "Add to PATH")
 - Apple TV on the same network
@@ -16,14 +15,15 @@ Sideload to your AppleTV Device Locally with a Windows PC! NO MAC NO XCODE
 
 ## Usage
 
-1. **Select IPA** — pick your tvOS app
-2. **Sign** — load your .p12 certificate + provisioning profile, click Sign
-3. **Connect Apple TV:**
+1. **Run the .exe as ADMINISTRATOR!**
+2. **Select IPA** — pick your tvOS app
+3. **Sign** — load your .p12 certificate + provisioning profile, click Sign
+4. **Connect Apple TV:**
    - Click **Scan** to find your Apple TV
    - Select it from the dropdown
    - Click **Pair** (first time only — enter PIN from TV screen)
    - Click **Start Tunnel** (must run as admin)
-4. **Install** — pushes the app to your Apple TV
+5. **Install** — pushes the app to your Apple TV
 
 ## Notes
 
