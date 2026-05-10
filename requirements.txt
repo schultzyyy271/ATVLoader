@@ -1,0 +1,5 @@
+customtkinter>=5.2.0
+pymobiledevice3>=9.0.0
+zeroconf>=0.100.0
+Pillow>=10.0.0
+pyinstaller>=6.0.0
