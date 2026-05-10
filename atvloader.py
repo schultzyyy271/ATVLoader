@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-ATVLoader v1.0 - Windows Apple TV Sideloader
-- Scan: zeroconf (in-process)
-- Sign: zsign (subprocess)  
-- Pair: pymobiledevice3 Python API + GUI PIN dialog (in-process)
-- Tunnel: pymobiledevice3 CLI (subprocess, proven reliable)
-- Install: pymobiledevice3 Python API via RSD (in-process)
-"""
+"""ATVLoader v1.0 — sideload apps to Apple TV from Windows"""
 
 import asyncio
 import builtins
@@ -30,9 +23,7 @@ from tkinter import filedialog, messagebox
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("ATVLoader")
 
-# ---------------------------------------------------------------------------
-# Async event loop
-# ---------------------------------------------------------------------------
+# -- async helpers --
 _bg_loop = None
 _bg_thread = None
 
@@ -48,9 +39,7 @@ def run_async(coro, timeout=300):
     _ensure_bg_loop()
     return asyncio.run_coroutine_threadsafe(coro, _bg_loop).result(timeout=timeout)
 
-# ---------------------------------------------------------------------------
-# Data
-# ---------------------------------------------------------------------------
+# -- data models --
 @dataclass
 class AppleTVDevice:
     name: str
@@ -80,9 +69,7 @@ class AppState:
         self.output_dir = str(Path.home() / "ATVLoader")
         os.makedirs(self.output_dir, exist_ok=True)
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# -- paths --
 def get_app_dir():
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
@@ -98,7 +85,7 @@ def find_zsign():
     return None
 
 def get_python():
-    """Get Python executable path. When frozen, find system Python."""
+    """Find python. When running as .exe, use system python."""
     if not getattr(sys, 'frozen', False):
         return sys.executable
     for c in [shutil.which("python"), shutil.which("python3")]:
@@ -106,9 +93,7 @@ def get_python():
             return c
     return "python"
 
-# ---------------------------------------------------------------------------
-# Backend: zsign
-# ---------------------------------------------------------------------------
+# -- signing (zsign) --
 def sign_ipa(ipa_path, p12_path, p12_password, provision_path, output_path, zsign_path,
              bundle_id=None, progress_callback=None):
     for label, path in [("zsign", zsign_path), ("IPA", ipa_path), ("Certificate", p12_path), ("Profile", provision_path)]:
@@ -128,9 +113,7 @@ def sign_ipa(ipa_path, p12_path, p12_password, provision_path, output_path, zsig
     except Exception as e:
         return False, f"zsign error: {e}"
 
-# ---------------------------------------------------------------------------
-# Backend: Discovery (zeroconf)
-# ---------------------------------------------------------------------------
+# -- discovery (bonjour/zeroconf) --
 def discover_apple_tvs(timeout=8.0, progress_callback=None):
     devices = []
     if progress_callback: progress_callback("Scanning network for Apple TVs...")
@@ -170,14 +153,12 @@ def discover_apple_tvs(timeout=8.0, progress_callback=None):
     if progress_callback: progress_callback(f"Found {len(devices)} device(s)")
     return devices
 
-# ---------------------------------------------------------------------------
-# Backend: Pair (pymobiledevice3 Python API — in-process with GUI PIN)
-# ---------------------------------------------------------------------------
+# -- pairing --
 async def _pair_device(ip, port, identifier, pin_callback=None, progress_callback=None):
     from pymobiledevice3.remote.tunnel_service import create_core_device_service_using_remotepairing_manual_pairing
     from pymobiledevice3.exceptions import RemotePairingCompletedError
 
-    # Re-scan for fresh port
+    # rescan to get current port (apple tv changes it)
     if progress_callback: progress_callback("Getting fresh connection...")
     try:
         fresh = discover_apple_tvs(timeout=5.0)
@@ -189,7 +170,7 @@ async def _pair_device(ip, port, identifier, pin_callback=None, progress_callbac
                 break
     except: pass
 
-    # Monkey-patch input() for GUI PIN dialog
+    # intercept pymobiledevice3's input() call so we can show a GUI dialog
     original_input = builtins.input
     def gui_input(prompt=""):
         log.info(f"pymobiledevice3 asks: {prompt}")
@@ -227,19 +208,13 @@ def pair_device(device, pin_callback=None, progress_callback=None):
     except Exception as e:
         return False, f"Pairing error: {e}"
 
-# ---------------------------------------------------------------------------
-# Backend: Tunnel (pymobiledevice3 CLI — subprocess, proven reliable)
-# ---------------------------------------------------------------------------
+# -- tunnel (pymobiledevice3 cli) --
 def start_tunnel(udid=None, progress_callback=None):
-    """
-    Start tunnel via pymobiledevice3 CLI with WiFi transport.
-    Returns (success, message, process, rsd_address, rsd_port).
-    The process must stay alive during install.
-    """
+    """Start wifi tunnel. Returns (ok, msg, process, address, port)."""
     python = get_python()
     cmd = [python, "-m", "pymobiledevice3", "remote", "start-tunnel", "-t", "wifi", "--script-mode"]
 
-    # Pass UDID to auto-select device and skip the interactive prompt
+    # skip device prompt if we know the udid
     if udid:
         cmd.extend(["--udid", udid])
 
@@ -247,7 +222,7 @@ def start_tunnel(udid=None, progress_callback=None):
         progress_callback("Starting tunnel...")
 
     try:
-        # Set PYTHONIOENCODING to avoid Unicode crashes in inquirer3
+        # force utf-8 to avoid encoding crashes on windows
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
 
@@ -271,7 +246,7 @@ def start_tunnel(udid=None, progress_callback=None):
                 time.sleep(0.1)
                 continue
 
-            # Strip ANSI escape codes for clean parsing
+            # strip ansi color codes
             clean = re.sub(r'\x1b\[[0-9;]*m', '', line).strip()
             if not clean:
                 continue
@@ -280,7 +255,7 @@ def start_tunnel(udid=None, progress_callback=None):
             if progress_callback:
                 progress_callback(f"[tunnel] {clean}")
 
-            # Parse output — script mode: "ADDRESS PORT" on one line
+            # parse address/port from output
             if "RSD Address:" in clean:
                 rsd_address = clean.split("RSD Address:")[1].strip()
             elif "RSD Port:" in clean:
@@ -291,10 +266,10 @@ def start_tunnel(udid=None, progress_callback=None):
             elif "ERROR" in clean or "error" in clean.lower() or "Traceback" in clean:
                 continue
             elif "tunnel created" in clean.lower():
-                # Next line should be the address/port
+                # address comes on the next line
                 continue
             else:
-                # Script mode: "ADDRESS PORT" e.g. "fd1b:eca2:c11b::1 64412"
+                # script mode: "ADDRESS PORT"
                 parts = clean.split()
                 if len(parts) == 2:
                     try:
@@ -318,9 +293,7 @@ def start_tunnel(udid=None, progress_callback=None):
     except Exception as e:
         return False, f"Tunnel error: {e}", None, None, None
 
-# ---------------------------------------------------------------------------
-# Backend: Install (pymobiledevice3 CLI — proven reliable)
-# ---------------------------------------------------------------------------
+# -- install --
 def install_ipa(ipa_path, rsd_address, rsd_port, progress_callback=None):
     if not os.path.isfile(ipa_path):
         return False, f"IPA not found: {ipa_path}"
@@ -339,7 +312,7 @@ def install_ipa(ipa_path, rsd_address, rsd_port, progress_callback=None):
             text=True,
         )
 
-        # Read output in real-time for progress updates
+        # read output for progress
         while True:
             line = proc.stdout.readline()
             if not line:
@@ -354,7 +327,7 @@ def install_ipa(ipa_path, rsd_address, rsd_port, progress_callback=None):
 
             log.info(f"[install] {line}")
 
-            # Parse progress percentage
+            # progress
             if "Complete" in line:
                 if progress_callback:
                     progress_callback(line.split("INFO")[-1].strip() if "INFO" in line else line)
@@ -366,7 +339,6 @@ def install_ipa(ipa_path, rsd_address, rsd_port, progress_callback=None):
                 if progress_callback:
                     progress_callback(f"Error: {line}")
 
-        # Check exit code
         if proc.returncode == 0:
             return True, "App installed!"
         else:
@@ -377,9 +349,7 @@ def install_ipa(ipa_path, rsd_address, rsd_port, progress_callback=None):
         log.error(f"Install failed: {e}", exc_info=True)
         return False, f"Install failed: {e}"
 
-# ---------------------------------------------------------------------------
-# GUI
-# ---------------------------------------------------------------------------
+# -- gui --
 C = {
     "bg": "#0a0a0f", "card": "#12121a", "card_h": "#1a1a25", "input": "#1e1e2a",
     "border": "#2a2a3a", "text": "#e0e0e8", "dim": "#7a7a8a", "muted": "#4a4a5a",
@@ -479,9 +449,7 @@ class StepCard(ctk.CTkFrame):
     def mark_err(self): self.badge.configure(fg_color=C["err"]); self.configure(border_color=C["err"])
     def reset(self): self.badge.configure(fg_color=C["accent"]); self.configure(border_color=C["border"]); self.set_status("")
 
-# ---------------------------------------------------------------------------
-# Main App
-# ---------------------------------------------------------------------------
+# -- main app --
 class ATVLoaderApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -512,7 +480,7 @@ class ATVLoaderApp(ctk.CTk):
         self.logp = LogPanel(self, height=160)
         self.logp.pack(fill="x", padx=24, pady=(4, 16))
 
-    # Step 1 — IPA
+    # step 1 — ipa
     def _s1(self):
         self.step1 = StepCard(self.scroll, 1, "Select IPA"); self.step1.pack(fill="x", pady=(0,8))
         self.ipa_fp = FilePicker(self.step1.content, "IPA File", [("IPA", "*.ipa"), ("All", "*.*")], on_select=self._ipa_sel)
@@ -536,7 +504,7 @@ class ATVLoaderApp(ctk.CTk):
                         break
         except: pass
 
-    # Step 2 — Sign
+    # step 2 — signing
     def _s2(self):
         self.step2 = StepCard(self.scroll, 2, "Signing Certificate"); self.step2.pack(fill="x", pady=(0,8))
         self.p12_fp = FilePicker(self.step2.content, "Certificate (.p12)", [("P12","*.p12"),("PFX","*.pfx"),("All","*.*")])
@@ -563,14 +531,14 @@ class ATVLoaderApp(ctk.CTk):
                                       corner_radius=8, command=self._sign)
         self.sign_btn.pack(fill="x", pady=(8,0))
 
-    # Step 3 — Connect Apple TV (Scan → Select → Pair → Tunnel)
+    # step 3 — connect
     def _s3(self):
         self.step3 = StepCard(self.scroll, 3, "Connect Apple TV"); self.step3.pack(fill="x", pady=(0,8))
         ctk.CTkLabel(self.step3.content,
                      text="Apple TV must be on same network. First-time: Settings → Remotes and Devices → Remote App and Devices",
                      font=("Segoe UI",11), text_color=C["dim"], justify="left", anchor="w").pack(fill="x", pady=(4,8))
 
-        # Device selector row
+        # device dropdown
         sel_row = ctk.CTkFrame(self.step3.content, fg_color="transparent"); sel_row.pack(fill="x", pady=(0,8))
         ctk.CTkLabel(sel_row, text="Device", font=("Segoe UI",12,"bold"), text_color=C["text"],
                      width=60).pack(side="left", padx=(0,8))
@@ -584,7 +552,7 @@ class ATVLoaderApp(ctk.CTk):
         )
         self.dev_dropdown.pack(side="left", fill="x", expand=True)
 
-        # Buttons row
+        # buttons
         br = ctk.CTkFrame(self.step3.content, fg_color="transparent"); br.pack(fill="x", pady=(0,4))
         bkw = dict(height=36, font=("Segoe UI",12,"bold"), fg_color=C["input"], hover_color=C["card_h"],
                    border_width=1, border_color=C["border"], text_color=C["text"])
@@ -592,7 +560,7 @@ class ATVLoaderApp(ctk.CTk):
         self.pair_b = ctk.CTkButton(br, text="2. Pair", width=130, command=self._pair, **bkw); self.pair_b.pack(side="left", padx=(0,6))
         self.tun_b = ctk.CTkButton(br, text="3. Start Tunnel", width=160, command=self._tunnel, **bkw); self.tun_b.pack(side="left")
 
-    # Step 4 — Install
+    # step 4 — install
     def _s4(self):
         self.step4 = StepCard(self.scroll, 4, "Install to Apple TV"); self.step4.pack(fill="x", pady=(0,8))
         self.inst_btn = ctk.CTkButton(self.step4.content, text="Install App", height=48, font=("Segoe UI",16,"bold"),
@@ -625,7 +593,7 @@ class ATVLoaderApp(ctk.CTk):
             self.pw.configure(show="•")
             self.pw_toggle.configure(text="Show")
 
-    # ── Sign ──
+    # ── sign ──
     def _sign(self):
         s = self.app_state
         ipa, p12, pw, prov = s.ipa_path, self.p12_fp.get_path(), self.pw.get(), self.prov_fp.get_path()
@@ -648,7 +616,7 @@ class ATVLoaderApp(ctk.CTk):
             self.after(0, lambda: self.sign_btn.configure(state="normal", text="Sign IPA"))
         self._t(do)
 
-    # ── Device selected from dropdown ──
+    # ── device selected ──
     def _on_device_selected(self, choice):
         for d in self.app_state.discovered_devices:
             label = f"{d.name}  ({d.address})"
@@ -657,7 +625,7 @@ class ATVLoaderApp(ctk.CTk):
                 self._l(f"Selected: {d.name} at {d.address}:{d.port}")
                 break
 
-    # ── Scan ──
+    # ── scan ──
     def _scan(self):
         self.scan_b.configure(state="disabled", text="Scanning..."); self.step3.reset()
         def do():
@@ -680,7 +648,7 @@ class ATVLoaderApp(ctk.CTk):
             self.after(0, up)
         self._t(do)
 
-    # ── Pair ──
+    # ── pair ──
     def _pair(self):
         dev = self.app_state.selected_device
         if not dev: return messagebox.showwarning("No device", "Scan for devices first")
@@ -704,13 +672,13 @@ class ATVLoaderApp(ctk.CTk):
                 self.after(0, lambda: self.pair_b.configure(state="normal", text="2. Pair"))
         self._t(do)
 
-    # ── Tunnel ──
+    # ── tunnel ──
     def _tunnel(self):
         self.tun_b.configure(state="disabled", text="Starting...")
         dev = self.app_state.selected_device
         def do():
             self._l("Starting tunnel...")
-            # Pass device identifier to auto-select (avoids interactive prompt)
+            # pass udid to skip device selection prompt
             udid = dev.identifier if dev else None
             ok, msg, proc, addr, port = start_tunnel(udid=udid, progress_callback=self._l)
             if ok:
@@ -725,7 +693,7 @@ class ATVLoaderApp(ctk.CTk):
                 self.after(0, lambda: self.tun_b.configure(state="normal", text="3. Start Tunnel"))
         self._t(do)
 
-    # ── Install ──
+    # ── install ──
     def _install(self):
         s = self.app_state
         if not s.signed_ipa_path or not os.path.isfile(s.signed_ipa_path):
@@ -747,7 +715,7 @@ class ATVLoaderApp(ctk.CTk):
         self._t(do)
 
     def destroy(self):
-        # Kill tunnel process on exit
+        # clean up tunnel on exit
         if self.app_state.tunnel_proc:
             try: self.app_state.tunnel_proc.terminate()
             except: pass
