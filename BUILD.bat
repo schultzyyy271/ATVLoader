@@ -1,9 +1,7 @@
 @echo off
 title ATVLoader - Build EXE
 echo.
-echo   ============================================
 echo     ATVLoader v1.0 - Building EXE
-echo   ============================================
 echo.
 
 python --version >nul 2>&1
@@ -95,15 +93,13 @@ if errorlevel 1 (
 echo.
 echo   [4/4] Creating setup script for end users...
 
-REM Create a SETUP.bat in the dist folder that installs Python deps
+REM setup script for end users
 (
 echo @echo off
 echo title ATVLoader - First Time Setup
 echo echo.
-echo echo   ============================================
 echo echo     ATVLoader - Installing Dependencies
 echo echo     This only needs to run once.
-echo echo   ============================================
 echo echo.
 echo python --version ^>nul 2^>^&1
 echo if errorlevel 1 ^(
@@ -121,15 +117,8 @@ echo pause
 ) > "dist\ATVLoader\SETUP_DEPS.bat"
 
 echo.
-echo   ============================================
 echo     Build complete!
-echo   ============================================
 echo.
 echo   Your app is at: dist\ATVLoader\
-echo.
-echo   Users need Python installed. First time they
-echo   run SETUP_DEPS.bat to install pymobiledevice3,
-echo   then just double-click ATVLoader.exe
-echo   ============================================
 echo.
 pause
