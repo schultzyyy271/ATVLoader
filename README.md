@@ -1,5 +1,5 @@
 # ATVLoader
-Sideload to your AppleTV Device Locally with a Windows PC!
+Sideload to your AppleTV Device Locally with a Windows PC! NO MAC NO XCODE
 
 ## Requirements
 
