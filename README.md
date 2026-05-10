@@ -2,7 +2,7 @@
 Sideload to your AppleTV Device Locally with a Windows PC! NO MAC NO XCODE
 
 ## Requirements
-- *Run the .exe as ADMINISTRATOR!*
+- **Run the .exe as ADMINISTRATOR!**
 - Windows 10/11
 - Python 3.10+ (https://python.org — check "Add to PATH")
 - Apple TV on the same network
